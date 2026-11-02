@@ -32,7 +32,9 @@
         <div data-shipping-options></div>
 
         <h2>Payment</h2>
+        <div data-payment-options></div>
         <p class="notice" data-payment-note></p>
+        <div class="notice" data-wallet-help hidden></div>
       </div>
 
       <aside class="summary">
@@ -52,6 +54,7 @@
   <script src="js/config.js"></script>
   <script src="js/products.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/usdc.js"></script>
   <script>
     const NIGERIAN_STATES = ['Abia', 'Abuja (FCT)', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno', 'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano', 'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara'];
 
@@ -68,9 +71,54 @@
       document.querySelector('[data-states]').insertAdjacentHTML('beforeend', NIGERIAN_STATES.map(s => `<option>${s}</option>`).join(''));
       document.querySelector('[data-shipping-options]').innerHTML = Object.entries(CONFIG.shipping).map(([key, opt], i) => `
         <label class="radio-card"><span><input type="radio" name="shipping" value="${key}" ${i === 0 ? 'checked' : ''}>${opt.label}</span><span data-ship-price="${key}"></span></label>`).join('');
-      document.querySelector('[data-payment-note]').textContent = livePayments
-        ? 'You will pay securely with card, bank transfer or USSD via Paystack.'
-        : 'Demo mode: no real payment is taken. Add a Paystack public key in js/config.js to accept payments.';
+      const paymentMethods = [
+        { id: 'card', label: 'Card, bank transfer or USSD', detail: 'Paystack' },
+        ...(USDCCheckout.isEnabled() ? [{ id: 'usdc', label: 'USDC stablecoin', detail: 'Base network' }] : [])
+      ];
+      document.querySelector('[data-payment-options]').innerHTML = paymentMethods.map((m, i) => `
+        <label class="radio-card"><span><input type="radio" name="payment" value="${m.id}" ${i === 0 ? 'checked' : ''}>${m.label}</span><span class="muted">${m.detail}</span></label>`).join('');
+
+      const paymentMethod = () => form.payment.value || 'card';
+      let usdcQuote = null;
+
+      function renderPaymentNote() {
+        const note = document.querySelector('[data-payment-note]');
+        const help = document.querySelector('[data-wallet-help]');
+        help.hidden = true;
+        if (paymentMethod() === 'card') {
+          note.textContent = livePayments
+            ? 'You will pay securely with card, bank transfer or USSD via Paystack.'
+            : 'Demo mode: no real payment is taken. Add a Paystack public key in js/config.js to accept payments.';
+          return;
+        }
+        note.textContent = 'Pay with USDC from any Base wallet (MetaMask, Coinbase Wallet and others). You approve one signature — no gas fee needed.';
+        if (!USDCCheckout.hasWallet()) {
+          const links = USDCCheckout.walletLinks();
+          help.hidden = false;
+          help.innerHTML = `No wallet found in this browser. On your phone, open this page in your wallet app:
+            <a class="link-underline" href="${links.metamask}">MetaMask</a> or
+            <a class="link-underline" href="${links.coinbase}">Coinbase Wallet</a>.`;
+        }
+      }
+
+      function orderBody(data) {
+        return {
+          items: Cart.items().map(({ id, size, color, qty }) => ({ id, size, color, qty })),
+          shipping: form.shipping.value,
+          customer: data && {
+            name: `${data.first} ${data.last}`.trim(), email: data.email, phone: data.phone,
+            address: data.address, city: data.city, state: data.state
+          },
+          notes: data?.notes || undefined
+        };
+      }
+
+      async function refreshUsdcQuote() {
+        usdcQuote = null;
+        if (paymentMethod() !== 'usdc') return renderSummary();
+        try { usdcQuote = await USDCCheckout.quote(orderBody()); } catch (err) { document.querySelector('[data-error]').textContent = err.message; }
+        renderSummary();
+      }
 
       function shippingCost() {
         const key = form.shipping.value;
@@ -85,22 +133,26 @@
         document.querySelector('[data-summary-lines]').innerHTML = Cart.items().map((item, i) => cartLineHtml(item, i, { editable: false })).join('');
         document.querySelector('[data-subtotal]').textContent = formatPrice(subtotal);
         document.querySelector('[data-shipping]').textContent = ship ? formatPrice(ship) : 'Free';
-        document.querySelector('[data-total]').textContent = formatPrice(subtotal + ship);
-        document.querySelector('[data-pay]').textContent = `Pay ${formatPrice(subtotal + ship)}`;
+        const usdcTotal = paymentMethod() === 'usdc' && usdcQuote ? ` · ≈ ${usdcQuote.totalUSDC.toFixed(2)} USDC` : '';
+        document.querySelector('[data-total]').textContent = formatPrice(subtotal + ship) + usdcTotal;
+        document.querySelector('[data-pay]').textContent = paymentMethod() === 'usdc'
+          ? `Pay with USDC${usdcQuote ? ` · ${usdcQuote.totalUSDC.toFixed(2)}` : ''}`
+          : `Pay ${formatPrice(subtotal + ship)}`;
         Object.keys(CONFIG.shipping).forEach(key => {
           const free = key === 'standard' && subtotal >= CONFIG.freeShippingThreshold;
           document.querySelector(`[data-ship-price="${key}"]`).textContent = free ? 'Free' : formatPrice(CONFIG.shipping[key].price);
         });
       }
 
-      function completeOrder(reference, data, total) {
+      function completeOrder(reference, data, total, usdc) {
         const orders = Store.get('jiggs_orders', []);
-        orders.push({ reference, date: new Date().toISOString(), customer: data, items: Cart.items(), total });
+        orders.push({ reference, date: new Date().toISOString(), customer: data, items: Cart.items(), total, usdc });
         Store.set('jiggs_orders', orders);
         Cart.clear();
         root.innerHTML = `<div class="confirmation">
           <h1 class="italic-heading">Thank you, ${escapeHtml(data.first)}</h1>
           <p>Your order <strong>${escapeHtml(reference)}</strong> has been received. A confirmation will be sent to ${escapeHtml(data.email)}.</p>
+          ${usdc ? `<p>Paid ${escapeHtml(usdc.amount)} USDC.${usdc.explorerUrl ? ` <a class="link-underline" href="${usdc.explorerUrl}" target="_blank" rel="noopener">View transaction</a>` : ''}</p>` : ''}
           <a class="link-underline" href="shop.html">Continue shopping</a>
         </div>`;
         window.scrollTo(0, 0);
@@ -117,7 +169,10 @@
         });
       }
 
-      form.addEventListener('change', e => { if (e.target.name === 'shipping') renderSummary(); });
+      form.addEventListener('change', e => {
+        if (e.target.name === 'payment') { renderPaymentNote(); refreshUsdcQuote(); }
+        if (e.target.name === 'shipping') refreshUsdcQuote();
+      });
       document.addEventListener('cart:change', renderSummary);
 
       form.addEventListener('submit', async e => {
@@ -132,6 +187,20 @@
         const data = Object.fromEntries(new FormData(form));
         const total = Cart.subtotal() + shippingCost();
         const reference = 'JG-' + Date.now().toString(36).toUpperCase();
+
+        if (paymentMethod() === 'usdc') {
+          const payButton = document.querySelector('[data-pay]');
+          payButton.disabled = true;
+          try {
+            const result = await USDCCheckout.pay(orderBody(data), status => { payButton.textContent = status; });
+            completeOrder(result.order.orderId, data, total, result);
+          } catch (err) {
+            error.textContent = err.code === 4001 ? 'You cancelled the request in your wallet.' : err.message;
+            payButton.disabled = false;
+            renderSummary();
+          }
+          return;
+        }
 
         if (!livePayments) { completeOrder(reference, data, total); return; }
 
@@ -153,6 +222,7 @@
         }
       });
 
+      renderPaymentNote();
       renderSummary();
     });
   </script>

@@ -13,6 +13,9 @@ const CONFIG = {
   // Paste your Paystack PUBLIC key (pk_test_... or pk_live_...) to enable real card payments.
   // Leave empty to run checkout in demo mode.
   paystackPublicKey: '',
+  // Address of the JIGGS API (the /server folder). Enables "Pay with USDC" at checkout.
+  // Locally it uses the server on this computer; set the hosted URL once the API is deployed.
+  apiBaseUrl: ['localhost', '127.0.0.1', ''].includes(location.hostname) ? 'http://localhost:4021' : '',
   contact: {
     email: 'hello@jiggs.example',
     phone: '+234 000 000 0000',

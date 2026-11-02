@@ -24,6 +24,13 @@ Checkout runs in demo mode until `paystackPublicKey` is set in `js/config.js`.
 Before going live, add a small server that verifies each Paystack reference with the secret key
 before an order is fulfilled — the browser alone can't be trusted to confirm payment.
 
+## USDC payments and AI agents (x402)
+The `server/` folder is a small API that accepts USDC on Base via the x402 protocol:
+AI agents pay per call to browse the catalogue and pay the order total to buy; shoppers get a
+"USDC stablecoin" option at checkout. See [server/README.md](server/README.md).
+The USDC option only appears once `apiBaseUrl` in `js/config.js` points at a running server
+(automatic when you open the site locally).
+
 ## Current limits (prototype)
 Bag, wishlist, newsletter sign-ups and orders are stored in the visitor's browser only.
 A backend (e.g. Shopify, or a custom API + database) is the next step for real order management.
