@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JIGGS — New Arrivals</title>
+  <meta name="description" content="JIGGS clothing — considered everyday pieces, made to last.">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="has-hero">
+  <main>
+    <section class="hero">
+      <!-- Replace with a campaign photo: <img src="images/hero.jpg" alt=""> -->
+      <div class="hero-placeholder" aria-hidden="true">
+        <svg viewBox="0 0 200 240"><g fill="#efe6d4" stroke="#cfc4ae" stroke-width="1" stroke-linejoin="round"><path d="M72 34 L128 34 L165 58 L185 160 L165 165 L150 95 L150 200 L50 200 L50 95 L35 165 L15 160 L35 58 Z"/><path d="M84 34 L84 20 L116 20 L116 34"/><path d="M100 20 V200"/></g></svg>
+      </div>
+      <div class="hero-content">
+        <h1 class="italic-heading">New Arrivals</h1>
+        <a href="shop.html?filter=new" class="link-underline">Shop now</a>
+      </div>
+    </section>
+
+    <section class="editorial">
+      <div class="editorial-grid">
+        <div class="polaroid"><div class="polaroid-inner" style="background:#1f1c1a" data-editorial="0"></div></div>
+        <div class="polaroid"><div class="polaroid-inner" style="background:#e9e7e3" data-editorial="1"></div></div>
+      </div>
+      <div class="editorial-text">
+        <h2 class="italic-heading">Soft Layers</h2>
+        <p>Soft textures, tactile warmth and thoughtful silhouettes in a restrained palette of neutrals define the JIGGS season wardrobe, balancing softness with structure and ease with precision.</p>
+        <a href="shop.html" class="link-underline">Shop all</a>
+      </div>
+    </section>
+
+    <section aria-label="New arrivals">
+      <div class="carousel" data-new-arrivals></div>
+    </section>
+
+    <section class="categories">
+      <div class="section-head"><h2 class="italic-heading">Shop by category</h2><a href="shop.html" class="link-underline">View all</a></div>
+      <div class="category-grid" data-categories></div>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/products.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const newIn = PRODUCTS.filter(p => p.isNew);
+      document.querySelector('[data-new-arrivals]').innerHTML = newIn.map(productCard).join('');
+
+      // Editorial frames: drawn placeholders until real campaign photos are added.
+      const editorialPicks = [findProduct('kemi-wool-coat'), findProduct('sola-knit-sweater')];
+      document.querySelectorAll('[data-editorial]').forEach((el, i) => {
+        el.style.position = 'relative';
+        el.innerHTML = productVisual(editorialPicks[i]);
+      });
+
+      document.querySelector('[data-categories]').innerHTML = CATEGORIES.map(c => {
+        const sample = PRODUCTS.find(p => p.category === c.id);
+        return `<a class="category-tile" href="shop.html?cat=${c.id}">${productVisual(sample)}<span>${c.name}</span></a>`;
+      }).join('');
+    });
+  </script>
+</body>
+</html>

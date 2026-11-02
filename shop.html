@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JIGGS — Shop</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <main>
+    <div class="page-head">
+      <h1 data-title>Shop All</h1>
+      <p class="muted" data-count></p>
+    </div>
+    <div class="toolbar">
+      <div class="chips" data-chips></div>
+      <label><span class="visually-hidden">Sort</span>
+        <select data-sort>
+          <option value="featured">Featured</option>
+          <option value="new">Newest</option>
+          <option value="price-asc">Price, low to high</option>
+          <option value="price-desc">Price, high to low</option>
+        </select>
+      </label>
+    </div>
+    <div class="product-grid" data-grid></div>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/products.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(location.search);
+      const state = { cat: params.get('cat') || '', filter: params.get('filter') || '', q: (params.get('q') || '').trim() };
+      const sortEl = document.querySelector('[data-sort]');
+
+      function render() {
+        let list = PRODUCTS.slice();
+        let title = 'Shop All';
+        if (state.filter === 'new') { list = list.filter(p => p.isNew); title = 'New Arrivals'; }
+        if (state.filter === 'wishlist') { list = list.filter(p => Wishlist.has(p.id)); title = 'Wishlist'; }
+        if (state.cat) { list = list.filter(p => p.category === state.cat); title = CATEGORIES.find(c => c.id === state.cat)?.name || title; }
+        if (state.q) {
+          const q = state.q.toLowerCase();
+          list = list.filter(p => [p.name, p.material, p.category, ...p.colors.map(c => c.name)].join(' ').toLowerCase().includes(q));
+          title = `Results for “${state.q}”`;
+        }
+        const sort = sortEl.value;
+        if (sort === 'price-asc') list.sort((a, b) => a.price - b.price);
+        if (sort === 'price-desc') list.sort((a, b) => b.price - a.price);
+        if (sort === 'new') list.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
+
+        document.title = `${CONFIG.brand} — ${title}`;
+        document.querySelector('[data-title]').textContent = title;
+        document.querySelector('[data-count]').textContent = `${list.length} ${list.length === 1 ? 'piece' : 'pieces'}`;
+        document.querySelector('[data-grid]').innerHTML = list.length
+          ? list.map(productCard).join('')
+          : `<p class="empty-state container">${state.filter === 'wishlist' ? 'Nothing saved yet. Tap the bookmark on any piece to keep it here.' : 'No pieces match — try another search.'}</p>`;
+
+        const chips = [['', 'All'], ['new', 'New Arrivals'], ...CATEGORIES.map(c => [c.id, c.name])];
+        document.querySelector('[data-chips]').innerHTML = chips.map(([id, name]) => {
+          const active = id === 'new' ? state.filter === 'new' && !state.cat : id ? state.cat === id : !state.cat && !state.filter;
+          return `<button class="chip${active ? ' is-active' : ''}" data-chip="${id}">${name}</button>`;
+        }).join('');
+      }
+
+      document.querySelector('[data-chips]').addEventListener('click', e => {
+        const chip = e.target.closest('[data-chip]');
+        if (!chip) return;
+        const id = chip.dataset.chip;
+        state.q = '';
+        if (id === 'new') { state.filter = 'new'; state.cat = ''; }
+        else { state.filter = ''; state.cat = id; }
+        const url = new URL(location.href);
+        url.search = id === 'new' ? '?filter=new' : id ? `?cat=${id}` : '';
+        history.replaceState(null, '', url);
+        render();
+      });
+      sortEl.addEventListener('change', render);
+      document.addEventListener('wishlist:change', () => { if (state.filter === 'wishlist') render(); });
+      render();
+    });
+  </script>
+</body>
+</html>

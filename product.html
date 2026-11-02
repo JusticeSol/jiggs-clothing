@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JIGGS — Product</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <main>
+    <div data-pdp></div>
+    <section aria-label="You may also like">
+      <div class="section-head"><h2 class="italic-heading">You may also like</h2></div>
+      <div class="carousel" data-related></div>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/products.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const id = new URLSearchParams(location.search).get('id');
+      const product = findProduct(id);
+      const root = document.querySelector('[data-pdp]');
+
+      if (!product) {
+        root.innerHTML = '<div class="confirmation"><h1 class="italic-heading">Piece not found</h1><p>It may have sold out or moved.</p><a class="link-underline" href="shop.html">Back to shop</a></div>';
+        return;
+      }
+
+      document.title = `${CONFIG.brand} — ${product.name}`;
+      const state = { color: 0, size: product.sizes.length === 1 ? product.sizes[0] : null };
+      const comingSoon = product.label === 'Coming soon';
+
+      function render() {
+        const color = product.colors[state.color];
+        const views = Math.max(2, (product.images || []).length);
+        root.innerHTML = `<div class="pdp">
+          <div class="pdp-gallery">
+            ${Array.from({ length: views }, (_, i) => `<div class="thumb">${productVisual(product, { colorIndex: state.color, imageIndex: i })}</div>`).join('')}
+          </div>
+          <div class="pdp-info">
+            ${product.label ? `<p class="muted" style="margin:0 0 .5rem">${escapeHtml(product.label)}</p>` : ''}
+            <h1>${escapeHtml(product.name)}</h1>
+            <div class="price">${formatPrice(product.price)}</div>
+
+            <div class="option-label"><span>Colour: ${escapeHtml(color.name)}</span></div>
+            <div class="color-options">
+              ${product.colors.map((c, i) => `<button class="color-option${i === state.color ? ' is-active' : ''}" style="background:${c.hex}" data-color="${i}" aria-label="${escapeHtml(c.name)}"></button>`).join('')}
+            </div>
+
+            <div class="option-label"><span>Size${state.size ? ': ' + escapeHtml(state.size) : ''}</span><a href="#" class="muted link-underline">Size guide</a></div>
+            <div class="size-options">
+              ${product.sizes.map(s => `<button class="size-option${s === state.size ? ' is-active' : ''}" data-size="${s}">${s}</button>`).join('')}
+            </div>
+
+            <div class="pdp-actions">
+              <button class="btn" data-add ${comingSoon ? 'disabled' : ''}>${comingSoon ? 'Coming soon' : 'Add to bag'}</button>
+              <button class="wish-btn${Wishlist.has(product.id) ? ' is-active' : ''}" data-wish="${product.id}" aria-label="Save to wishlist">${ICONS.bookmark}</button>
+            </div>
+            <div class="form-error" data-error></div>
+
+            <details class="accordion" open><summary>Description</summary><div class="accordion-body">${escapeHtml(product.description)}</div></details>
+            <details class="accordion"><summary>Composition & care</summary><div class="accordion-body">${escapeHtml(product.material)}. Hand wash cold or dry clean. Dry flat, away from direct sunlight.</div></details>
+            <details class="accordion"><summary>Delivery & returns</summary><div class="accordion-body">Delivery nationwide in 1–5 working days. Free delivery on orders over ${formatPrice(CONFIG.freeShippingThreshold)}. Returns accepted within 14 days in original condition.</div></details>
+          </div>
+        </div>`;
+      }
+
+      root.addEventListener('click', e => {
+        const colorBtn = e.target.closest('[data-color]');
+        if (colorBtn) { state.color = +colorBtn.dataset.color; render(); return; }
+        const sizeBtn = e.target.closest('[data-size]');
+        if (sizeBtn) { state.size = sizeBtn.dataset.size; render(); return; }
+        if (e.target.closest('[data-add]')) {
+          if (!state.size) { root.querySelector('[data-error]').textContent = 'Please select a size.'; return; }
+          Cart.add(product.id, state.size, product.colors[state.color].name);
+          openPanel('cart');
+        }
+      });
+
+      render();
+
+      const related = PRODUCTS.filter(p => p.id !== product.id)
+        .sort((a, b) => (b.category === product.category) - (a.category === product.category))
+        .slice(0, 6);
+      document.querySelector('[data-related]').innerHTML = related.map(productCard).join('');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JIGGS — Checkout</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <main data-checkout-root>
+    <form class="checkout" data-checkout novalidate>
+      <div>
+        <h2>Contact</h2>
+        <div class="field-grid">
+          <div class="field"><label for="email">E-mail</label><input id="email" name="email" type="email" required autocomplete="email"></div>
+          <div class="field"><label for="phone">Phone number</label><input id="phone" name="phone" type="tel" required autocomplete="tel" placeholder="080..."></div>
+        </div>
+
+        <h2>Delivery address</h2>
+        <div class="field-grid">
+          <div class="field half"><label for="first">First name</label><input id="first" name="first" required autocomplete="given-name"></div>
+          <div class="field half"><label for="last">Last name</label><input id="last" name="last" required autocomplete="family-name"></div>
+          <div class="field"><label for="address">Address</label><input id="address" name="address" required autocomplete="street-address"></div>
+          <div class="field half"><label for="city">City</label><input id="city" name="city" required autocomplete="address-level2"></div>
+          <div class="field half"><label for="state">State</label>
+            <select id="state" name="state" required data-states><option value="">Select state</option></select>
+          </div>
+          <div class="field"><label for="notes">Delivery notes (optional)</label><textarea id="notes" name="notes" rows="2"></textarea></div>
+        </div>
+
+        <h2>Delivery method</h2>
+        <div data-shipping-options></div>
+
+        <h2>Payment</h2>
+        <p class="notice" data-payment-note></p>
+      </div>
+
+      <aside class="summary">
+        <h2>Order summary</h2>
+        <div data-summary-lines></div>
+        <div style="margin-top:1.25rem">
+          <div class="totals-row"><span>Subtotal</span><span data-subtotal></span></div>
+          <div class="totals-row"><span>Delivery</span><span data-shipping></span></div>
+          <div class="totals-row total"><span>Total</span><span data-total></span></div>
+        </div>
+        <button class="btn" type="submit" style="margin-top:1.5rem" data-pay>Pay now</button>
+        <div class="form-error" data-error></div>
+      </aside>
+    </form>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/products.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    const NIGERIAN_STATES = ['Abia', 'Abuja (FCT)', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno', 'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano', 'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger', 'Ogun', 'Ondo', 'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara'];
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const form = document.querySelector('[data-checkout]');
+      const root = document.querySelector('[data-checkout-root]');
+      const livePayments = Boolean(CONFIG.paystackPublicKey);
+
+      if (!Cart.count()) {
+        root.innerHTML = '<div class="confirmation"><h1 class="italic-heading">Your bag is empty</h1><p>Add a few pieces and come back.</p><a class="link-underline" href="shop.html?filter=new">Shop new arrivals</a></div>';
+        return;
+      }
+
+      document.querySelector('[data-states]').insertAdjacentHTML('beforeend', NIGERIAN_STATES.map(s => `<option>${s}</option>`).join(''));
+      document.querySelector('[data-shipping-options]').innerHTML = Object.entries(CONFIG.shipping).map(([key, opt], i) => `
+        <label class="radio-card"><span><input type="radio" name="shipping" value="${key}" ${i === 0 ? 'checked' : ''}>${opt.label}</span><span data-ship-price="${key}"></span></label>`).join('');
+      document.querySelector('[data-payment-note]').textContent = livePayments
+        ? 'You will pay securely with card, bank transfer or USSD via Paystack.'
+        : 'Demo mode: no real payment is taken. Add a Paystack public key in js/config.js to accept payments.';
+
+      function shippingCost() {
+        const key = form.shipping.value;
+        const subtotal = Cart.subtotal();
+        if (key === 'standard' && subtotal >= CONFIG.freeShippingThreshold) return 0;
+        return CONFIG.shipping[key].price;
+      }
+
+      function renderSummary() {
+        const subtotal = Cart.subtotal();
+        const ship = shippingCost();
+        document.querySelector('[data-summary-lines]').innerHTML = Cart.items().map((item, i) => cartLineHtml(item, i, { editable: false })).join('');
+        document.querySelector('[data-subtotal]').textContent = formatPrice(subtotal);
+        document.querySelector('[data-shipping]').textContent = ship ? formatPrice(ship) : 'Free';
+        document.querySelector('[data-total]').textContent = formatPrice(subtotal + ship);
+        document.querySelector('[data-pay]').textContent = `Pay ${formatPrice(subtotal + ship)}`;
+        Object.keys(CONFIG.shipping).forEach(key => {
+          const free = key === 'standard' && subtotal >= CONFIG.freeShippingThreshold;
+          document.querySelector(`[data-ship-price="${key}"]`).textContent = free ? 'Free' : formatPrice(CONFIG.shipping[key].price);
+        });
+      }
+
+      function completeOrder(reference, data, total) {
+        const orders = Store.get('jiggs_orders', []);
+        orders.push({ reference, date: new Date().toISOString(), customer: data, items: Cart.items(), total });
+        Store.set('jiggs_orders', orders);
+        Cart.clear();
+        root.innerHTML = `<div class="confirmation">
+          <h1 class="italic-heading">Thank you, ${escapeHtml(data.first)}</h1>
+          <p>Your order <strong>${escapeHtml(reference)}</strong> has been received. A confirmation will be sent to ${escapeHtml(data.email)}.</p>
+          <a class="link-underline" href="shop.html">Continue shopping</a>
+        </div>`;
+        window.scrollTo(0, 0);
+      }
+
+      function loadPaystack() {
+        return new Promise((resolve, reject) => {
+          if (window.PaystackPop) return resolve();
+          const s = document.createElement('script');
+          s.src = 'https://js.paystack.co/v1/inline.js';
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('Could not load Paystack'));
+          document.head.appendChild(s);
+        });
+      }
+
+      form.addEventListener('change', e => { if (e.target.name === 'shipping') renderSummary(); });
+      document.addEventListener('cart:change', renderSummary);
+
+      form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const error = document.querySelector('[data-error]');
+        if (!form.checkValidity()) {
+          error.textContent = 'Please complete all required fields.';
+          form.querySelector(':invalid')?.focus();
+          return;
+        }
+        error.textContent = '';
+        const data = Object.fromEntries(new FormData(form));
+        const total = Cart.subtotal() + shippingCost();
+        const reference = 'JG-' + Date.now().toString(36).toUpperCase();
+
+        if (!livePayments) { completeOrder(reference, data, total); return; }
+
+        try {
+          await loadPaystack();
+          PaystackPop.setup({
+            key: CONFIG.paystackPublicKey,
+            email: data.email,
+            amount: total * 100, // Paystack expects kobo
+            currency: CONFIG.currencyCode,
+            ref: reference,
+            metadata: { phone: data.phone, name: `${data.first} ${data.last}`, items: Cart.items() },
+            // NOTE: before shipping orders, verify the reference on a server with your Paystack SECRET key.
+            callback: response => completeOrder(response.reference, data, total),
+            onClose: () => { error.textContent = 'Payment was cancelled.'; }
+          }).openIframe();
+        } catch (err) {
+          error.textContent = err.message;
+        }
+      });
+
+      renderSummary();
+    });
+  </script>
+</body>
+</html>
